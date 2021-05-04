@@ -7,6 +7,7 @@
 #include <stdio.h>  
 #include <string.h> 
 #include <stdlib.h>
+#include "header.h"
 #include "schedule.h"
 
 /**
@@ -15,7 +16,9 @@
 void process( Task *tasks, int task_size )
 {
     int flag_time, total_burst_time, i, ii, wrt_size, start_time;
+    int curr_arrival, total_idle_time, idle_time;
     double ave_turnaround, ave_wait;
+    char space[STR];
     Task *running_task;
     WriteTask *wrt_task;
 
@@ -41,17 +44,37 @@ void process( Task *tasks, int task_size )
         start_time = 0;
 
     /* Selecting process to be allocated in the CPU from time to time */
-    i = 0;
+    i = 0; total_idle_time = 0;
     while ( flag_time < total_burst_time ) {
-        running_task = priority(flag_time, tasks, task_size); 
-        CPU(tasks, task_size, running_task, &wrt_task[i], &flag_time);
+        if ( hasProcess( tasks, task_size, flag_time ) == TRUE ) {
+            running_task = priority(flag_time, tasks, task_size); 
+            CPU(tasks, task_size, running_task, &wrt_task[i], &flag_time);
+        } else {
+            idle_time = 0;
+            curr_arrival = flag_time;
+            /* Append spaces everytime when there was no process found */
+            while ( hasProcess( tasks, task_size, flag_time ) == FALSE ) {
+                strcat(space, " ");
+                ++flag_time;
+            }
+ 
+            idle_time = flag_time - curr_arrival;
+            total_idle_time += idle_time;
+
+            /* Writing to the wrt_task */
+            strcpy(wrt_task[i].label, space);
+            wrt_task[i].arrival = curr_arrival;
+            wrt_task[i].turnaround = flag_time;
+            wrt_task[i].status = WRITTEN; 
+            total_burst_time += total_idle_time;
+        }
         ++i;
     }
 
     gantt_chart(wrt_task, wrt_size, start_time);
     printf("\n");
     ave_turnaround = ave_turnaround_time(wrt_task, wrt_size);
-    ave_wait = ave_wait_time(wrt_task, wrt_size);
+    ave_wait = ave_wait_time(wrt_task, wrt_size, total_idle_time);
     printf("Average Turnaround Time: %.2f\n", ave_turnaround);
     printf("Average Waiting Time: %.2f\n", ave_wait);
 
@@ -59,62 +82,183 @@ void process( Task *tasks, int task_size )
 }
 
 /**
- * Return the average waiting time of the processes 
+ * Return TRUE if there are processes arrived from 0 to flag_time
  */
-double ave_wait_time( WriteTask *wrt_task, int wrt_size )
+int hasProcess( Task *tasks, int task_size, int flag_time )
 {
-    int i, actual_size, wait_time;
-    double ave, sum;
+    int i, exist;
 
-    /**                                                     **
-     *         CALCULATE SUM OF WAITING TIME                 *
-     *  The previous process's turnaround time is the        *
-     *  time when current process get execute in CPU         *
-     *                                                       *
-     *  waiting time = previous process turnaround time -    *
-     *                 current arrival time                  *
-     *                                                       *
-     *  i = 1 as First Process always has 0 waiting time     *
-     **                                                     **/
-    sum = 0.0;
-    for ( i = 1; i < wrt_size - 1; ++i ) {
-        /* Waiting Time = Previous Turnaround Time - Current Arrival Time */
-        if ( wrt_task[i].status == WRITTEN ) {  /* Only process written entry */
-            wait_time = wrt_task[i-1].turnaround - wrt_task[i].arrival;
-            sum += (double)wait_time;
-        }
+    /* Iterate until a process arrived at flag_time is found */
+    i = 0; exist = FALSE;
+    while ( i < task_size && exist == FALSE ) {
+        /* All process before flag_time will be accepted */
+        if ( tasks[i].arrival <= flag_time && tasks[i].burst != 0 )
+            exist = TRUE;
+        ++i;
     }
-
-    actual_size = 0;
-    for ( i = 0; i < wrt_size; ++i ) {
-        if ( wrt_task[i].status == WRITTEN )    /* Only process written entry */
-
-            ++actual_size;
-    }
-    ave = sum / (double)actual_size;
-    return ave;
+    return exist;
 }
 
 /**
- * Return the average turn around time of the processes 
+ * Import : flag_time -> time from 0 up until the latest/current runtime
+ *          tasks     -> decide which specific tasks[i] to be returned
+ *
+ * Purpoose: Return the highest priority task for all the tasks starting from 0 to flag_time
  */
-double ave_turnaround_time( WriteTask *wrt_task, int wrt_size )
+Task* priority( int flag_time, Task *tasks, int task_size )
 {
-    int i, actual_size;
-    double ave, sum;
+    int i, j, k, pr, idx;
+    int pr_idx;         /* Highest priority index for undone task */
+    int *undone_idx;    /* Indexes for all undone tasks */
+    Task *ret_task;
 
-    sum = 0.0;
-    /* Turnaround Time = Finished Time - Arrival Time */
-    for ( i = 0; i < wrt_size; ++i )
-        sum += wrt_task[i].turnaround - wrt_task[i].arrival;
+    /* Setup the undone_idx */
+    undone_idx = calloc(sizeof(int), task_size);
+    set_arr(undone_idx, task_size, EMPTY_IDX);
 
-    actual_size = 0;
-    for ( i = 0; i < wrt_size; ++i ) {
-        if ( wrt_task[i].status == WRITTEN )
-            ++actual_size;
+    /**            
+     * Stops when current arrival time for tasks[i] is
+     * greater than current latest time (flag_time)  
+     *
+     * Store the index of all undone tasks
+     */
+    i = 0; j = 0;
+    while ( i < task_size && tasks[i].arrival <= flag_time ) {
+        /* Check if this task had finished execution */
+        if ( tasks[i].burst != 0 ) {
+            undone_idx[j] = i;
+            ++j;
+        }
+        ++i;
     }
-    ave = sum / (double)actual_size;
-    return ave;
+
+    /* Get the first undone priority */
+    pr_idx = undone_idx[0];
+    pr = tasks[pr_idx].priority;
+
+    /* Find the highest priority among all undone task entries */
+    for ( k = 1; k < task_size; ++k ) {
+        if ( undone_idx[k] != EMPTY_IDX ) {
+            /* Compare current priority with the latest highest priority */
+            /* Lower Value indicates higher priority */
+            idx = undone_idx[k];
+            if ( tasks[idx].priority < pr ) {
+                pr_idx = idx;               /* Update the latest index */ 
+                pr = tasks[idx].priority;   /* Update the latest priority */
+            }
+        }
+    }
+    ret_task = &tasks[pr_idx];
+    free(undone_idx); undone_idx = NULL;
+    return ret_task;
+}
+
+/**
+ * Import: tasks        -> For the use of getting next preempt information
+ *         running_task -> Decrement on the burst time of current running task
+ *         wrt_task     -> Write the process with its remaining burst time
+ *         *flag_time   -> Update the flag_time in process function 
+ *                      -> Store its final value into wrt_task[i]
+ *
+ * Purpose: Performs burst_time decrement on the running_task
+ */
+void CPU( Task *tasks, int task_size, Task *running_task, 
+          WriteTask *wrt_task, int *flag_time )
+{
+    int stop = FALSE;
+
+    /**
+     * Stops when higher priority task had preempted OR
+     * when current task done execution
+     */
+    while ( stop == FALSE && running_task->burst > 0 ) {
+        running_task->burst--;
+        /* Update flag_time in process function (its caller) */
+        *flag_time = *flag_time + 1; 
+
+        /* Check if the newly arrived process will preempt current process */
+        if ( isPreempt(tasks, task_size, 
+                       *flag_time, running_task ) == TRUE ) {
+            stop = TRUE;
+        }
+    }
+
+    /* Writing to the wrt_task */
+    strcpy(wrt_task->label, running_task->label);
+    wrt_task->arrival = running_task->arrival;
+    wrt_task->turnaround = *flag_time;
+    wrt_task->status = WRITTEN; 
+}
+
+/**
+ * Compare the priority of the newly arrived process and 
+ * return TRUE if newly arrived process had higher priority
+ */
+int isPreempt( Task *tasks, int task_size, int curr_time, Task *running_task )
+{
+    int i, j, ii;
+    int *undone_idx, idx;
+    int preempt = FALSE;
+
+    undone_idx = calloc(sizeof(int), task_size); 
+    set_arr(undone_idx, task_size, EMPTY_IDX);
+
+    j = 0;
+    for ( i = 0; i < task_size; ++i ) {
+        /* Store all index for arrived AND undone task */
+        if ( tasks[i].arrival <= curr_time && 
+             tasks[i].burst != 0 ) {
+            undone_idx[j] = i;
+            ++j;
+        }
+    }
+    
+    ii = 0;
+    while ( ii < task_size && preempt == FALSE ) {
+        idx = undone_idx[ii];  /* Get the idx for undone task */
+
+        /* Compute only all available index */
+        if ( undone_idx[ii] != EMPTY_IDX ) {
+            /* Check if preemption is possible */
+            if ( tasks[idx].priority < running_task->priority )
+                preempt = TRUE;
+        }
+        ++ii;
+    }
+    return preempt;
+}
+
+/**
+ * Inform the next preempt time and index from current running task 
+ */
+int next_preempt( Task *tasks, int task_size, 
+                  Task *running_task, int *preempt_idx )
+{
+    int i, j;
+    int time;
+
+    /**
+     * Find the entries that stores running_task in tasks
+     *
+     * Using the comparison of address in each entries of task[i]
+     * with the address of running_task 
+     */
+    i = 0;
+    while ( i < task_size && strcmp(tasks[i].label, running_task->label) != 0 )
+        ++i;
+ 
+    /* ASSERTION: task[i].arrival > running_task->arrival */
+    /* Stops when next arrival time was found */
+    j = i;
+    while ( j < task_size && tasks[j].arrival == running_task->arrival )
+        ++j;
+
+    /* Return Next Preempt Index and Next Preempt Time */
+    if ( j < task_size ) {
+        *preempt_idx = j;
+        time = tasks[j].arrival;
+    }
+    return time;
 }
 
 /** 
@@ -149,6 +293,7 @@ void gantt_chart( WriteTask *wrt_task, int wrt_size, int start_time )
            Therefore, a status to check if it was WRITTEN is needed */
         if ( wrt_task[i].status == WRITTEN ) {
             printf("|%s", wrt_task[i].label);
+
             /* Printing space based on distance between 
                previous and current burst time */
             if ( i > 0 ) 
@@ -192,7 +337,7 @@ void gantt_chart( WriteTask *wrt_task, int wrt_size, int start_time )
                 idx = i-1;
             else 
                 idx = 0;
-            for ( j = wrt_task[idx].turnaround; j < wrt_task[i].turnaround; ++j ) 
+            for ( j = wrt_task[idx].turnaround; j < wrt_task[i].turnaround; ++j )
                 printf(" ");
             printf(" %d ", wrt_task[i].turnaround);
         }
@@ -201,146 +346,83 @@ void gantt_chart( WriteTask *wrt_task, int wrt_size, int start_time )
 }
 
 /**
- * Import: tasks        -> For the use of getting next preempt information
- *         running_task -> Decrement on the burst time of current running task
- *         wrt_task     -> Write the process with its remaining burst time
- *         *flag_time   -> Update the flag_time in process function 
- *                      -> Store its final value into wrt_task[i]
- *
- * Purpose: Performs burst_time decrement on the running_task
+ * Return the average waiting time of the processes 
  */
-void CPU( Task *tasks, int task_size, Task *running_task, 
-          WriteTask *wrt_task, int *flag_time )
+double ave_wait_time( WriteTask *wrt_task, int wrt_size,
+                      int total_idle_time )
 {
-    int preempt, preempt_idx, *preempt_ptr;
-    int stop = FALSE;
+    int i, actual_size, wait_time;
+    double ave, sum;
 
-    preempt_idx = 0;
-    preempt_ptr = &preempt_idx;
-    preempt = next_preempt(tasks, task_size, running_task, preempt_ptr);
-
-    /**
-     * Stops when higher priority task had preempted OR
-     * when current task done execution
-     */
-    while ( stop == FALSE && running_task->burst > 0 ) {
-        running_task->burst--;
-        /* Update flag_time in process function (its caller) */
-        *flag_time = *flag_time + 1; 
-
-        /* Check if the newly arrived process will preempt current process */
-        if ( *flag_time == preempt &&
-             isPreempt(tasks, preempt_idx, running_task) == TRUE ) {
-            stop = TRUE;
+    /**                                                     **
+     *         CALCULATE SUM OF WAITING TIME                 *
+     *  The previous process's turnaround time is the        *
+     *  time when current process get execute in CPU         *
+     *                                                       *
+     *  waiting time = previous process turnaround time -    *
+     *                 current arrival time                  *
+     *                                                       *
+     *  i = 1 as First Process always has 0 waiting time     *
+     **                                                     **/
+    sum = 0.0;
+    for ( i = 1; i < wrt_size - 1; ++i ) {
+        /* Waiting Time = Previous Turnaround Time - Current Arrival Time */
+        /* Check if idle time of CPU */
+        /* If current label does not contains 'P', 
+           it there are no process at this time */
+        if ( wrt_task[i].status == WRITTEN && 
+             strchr(wrt_task[i].label, 'P') != NULL ) {
+            wait_time = wrt_task[i-1].turnaround - wrt_task[i].arrival;
+            sum += (double)wait_time;
         }
     }
 
-    /* Writing to the wrt_task */
-    strcpy(wrt_task->label, running_task->label);
-    wrt_task->arrival = running_task->arrival;
-    wrt_task->turnaround = *flag_time;
-    wrt_task->status = WRITTEN; 
-}
-
-/**
- * Compare the priority of the newly arrived process and 
- * return TRUE if newly arrived process had higher priority
- */
-int isPreempt( Task *tasks, int preempt_idx, Task *running_task )
-{
-    int preempt = FALSE;
-
-    /* Lower burst time indicate higher priority. */
-    if ( tasks[preempt_idx].burst < running_task->burst )
-        preempt = TRUE;
-    return preempt;
-}
-
-/**
- * Inform the next preempt time and index from current running task 
- */
-int next_preempt( Task *tasks, int task_size, 
-                  Task *running_task, int *preempt_idx )
-{
-    int i, j;
-    int time;
-
-    /**
-     * Find the entries that stores running_task in tasks
-     *
-     * Using the comparison of address in each entries of task[i]
-     * with the address of running_task 
-     */
-    i = 0;
-    while ( i < task_size && strcmp(tasks[i].label, running_task->label) != 0 )
-        ++i;
- 
-    /* ASSERTION: task[i].arrival > running_task->arrival */
-    /* Stops when next arrival time was found */
-    j = i;
-    while ( j < task_size && tasks[j].arrival == running_task->arrival )
-        ++j;
-
-    /* Return Next Preempt Index and Next Preempt Time */
-    if ( j < task_size ) {
-        *preempt_idx = j;
-        time = tasks[j].arrival;
-    }
-    return time;
-}
-
-/**
- * Import : flag_time -> time from 0 up until the latest/current runtime
- *          tasks     -> decide which specific tasks[i] to be returned
- *
- * Purpoose: Return the highest priority task for all the tasks starting from 0 to flag_time
- */
-Task* priority( int flag_time, Task *tasks, int task_size )
-{
-    int i, j, k, pr_burst, idx;
-    int pr_idx;         /* Highest priority index for undone task */
-    int *undone_idx;    /* Indexes for all undone tasks */
-    Task *ret_task;
-
-    /* Setup the undone_idx */
-    undone_idx = calloc(sizeof(int), task_size);
-    set_arr(undone_idx, task_size, EMPTY_IDX);
-
-    /**            
-     * Stops when current arrival time for tasks[i] is
-     * greater than current latest time (flag_time)  
-     *
-     * Store the index of all undone tasks
-     */
-    i = 0; j = 0;
-    while ( i < task_size && tasks[i].arrival <= flag_time ) {
-        /* Check if this task had finished execution */
-        if ( tasks[i].burst != 0 ) {
-            undone_idx[j] = i;
-            ++j;
-        }
-        ++i;
-    }
-
-    /* Get the first undone priority */
-    pr_idx = undone_idx[0];
-    pr_burst = tasks[pr_idx].burst;
-
-    /* Find the highest priority among all undone task entries */
-    for ( k = 1; k < task_size; ++k ) {
-        if ( undone_idx[k] != EMPTY_IDX ) {
-            /* Compare current priority with the latest highest priority */
-            /* Lower Value indicates higher priority */
-            idx = undone_idx[k];
-            if ( tasks[idx].burst < pr_burst ) {
-                pr_idx = idx;                  /* Update the latest index */ 
-                pr_burst = tasks[idx].burst;   /* Update the latest priority */
-            }
+    actual_size = 0;
+    for ( i = 0; i < wrt_size; ++i ) {
+        /* Check if idle time of CPU */
+        /* If current label does not contains 'P', 
+           it there are no process at this time */
+        if ( wrt_task[i].status == WRITTEN && 
+             strchr(wrt_task[i].label, 'P') != NULL ) {
+            ++actual_size;
         }
     }
-    ret_task = &tasks[pr_idx];
-    free(undone_idx); undone_idx = NULL;
-    return ret_task;
+    ave = sum / (double)actual_size;
+    return ave;
+}
+
+/**
+ * Return the average turn around time of the processes 
+ */
+double ave_turnaround_time( WriteTask *wrt_task, int wrt_size )
+{
+    int i, actual_size;
+    double ave, sum;
+
+    sum = 0.0;
+    /* Turnaround Time = Finished Time - Arrival Time */
+    for ( i = 0; i < wrt_size; ++i ) {
+        /* Check if idle time of CPU */
+        /* If current label does not contains 'P', 
+           it there are no process at this time */
+        if ( wrt_task[i].status == WRITTEN && 
+             strchr(wrt_task[i].label, 'P') != NULL ) {
+            sum += wrt_task[i].turnaround - wrt_task[i].arrival;
+        }
+    }
+
+    actual_size = 0;
+    for ( i = 0; i < wrt_size; ++i ) {
+        /* Check if idle time of CPU */
+        /* If current label does not contains 'P', 
+           it there are no process at this time */
+        if ( wrt_task[i].status == WRITTEN && 
+             strchr(wrt_task[i].label, 'P') != NULL ) {
+            ++actual_size;
+        }
+    }
+    ave = sum / (double)actual_size;
+    return ave;
 }
 
 /* Set all element in arr to val */
@@ -351,7 +433,7 @@ void set_arr( int *arr, int size, int val )
         arr[i] = val;
 }
 
-/* @return sum of the burst time of tasks */
+/* Return sum of the burst time of tasks */
 int sum_burst( Task *tasks, int task_size )
 {
     int i;

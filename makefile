@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Werror -ansi -pedantic -ansi -g
+CFLAGS = -Werror -Wall -ansi -pedantic -g
 OBJ = main.o file.o sort.o schedule.o
 EXEC = main
 
@@ -15,7 +15,7 @@ file.o : file.c file.h header.h Task.h
 sort.o : sort.c Task.h
 	$(CC) $(CFLAGS) -c sort.c
 
-schedule.o : schedule.c schedule.h Task.h
+schedule.o : schedule.c schedule.h Task.h header.h
 	$(CC) $(CFLAGS) -c schedule.c
 
 clean:
