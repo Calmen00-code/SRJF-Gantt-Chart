@@ -38,7 +38,6 @@ Task* read_task( char filename[] )
         {
             tasks[i].arrival = arrival_time;
             tasks[i].burst = burst_time;
-            tasks[i].priority = priority;
             sprintf(process_label, "%c%d", p_label, i+1);
             strcpy(tasks[i].label, process_label);
             ++i;

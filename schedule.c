@@ -107,7 +107,7 @@ int hasProcess( Task *tasks, int task_size, int flag_time )
  */
 Task* priority( int flag_time, Task *tasks, int task_size )
 {
-    int i, j, k, pr, idx;
+    int i, j, k, pr_burst, idx;
     int pr_idx;         /* Highest priority index for undone task */
     int *undone_idx;    /* Indexes for all undone tasks */
     Task *ret_task;
@@ -134,7 +134,7 @@ Task* priority( int flag_time, Task *tasks, int task_size )
 
     /* Get the first undone priority */
     pr_idx = undone_idx[0];
-    pr = tasks[pr_idx].priority;
+    pr_burst = tasks[pr_idx].burst;
 
     /* Find the highest priority among all undone task entries */
     for ( k = 1; k < task_size; ++k ) {
@@ -142,9 +142,9 @@ Task* priority( int flag_time, Task *tasks, int task_size )
             /* Compare current priority with the latest highest priority */
             /* Lower Value indicates higher priority */
             idx = undone_idx[k];
-            if ( tasks[idx].priority < pr ) {
-                pr_idx = idx;               /* Update the latest index */ 
-                pr = tasks[idx].priority;   /* Update the latest priority */
+            if ( tasks[idx].burst < pr_burst ) {
+                pr_idx = idx;                     /* Update the latest index */ 
+                pr_burst = tasks[idx].burst;      /* Update the latest burst */
             }
         }
     }
@@ -220,7 +220,7 @@ int isPreempt( Task *tasks, int task_size, int curr_time, Task *running_task )
         /* Compute only all available index */
         if ( undone_idx[ii] != EMPTY_IDX ) {
             /* Check if preemption is possible */
-            if ( tasks[idx].priority < running_task->priority )
+            if ( tasks[idx].burst < running_task->burst )
                 preempt = TRUE;
         }
         ++ii;
