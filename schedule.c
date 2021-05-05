@@ -74,7 +74,7 @@ void process( Task *tasks, int task_size )
     gantt_chart(wrt_task, wrt_size, start_time);
     printf("\n");
     ave_turnaround = ave_turnaround_time(wrt_task, wrt_size);
-    ave_wait = ave_wait_time(wrt_task, wrt_size, total_idle_time);
+    ave_wait = ave_wait_time(wrt_task, wrt_size);
     printf("Average Turnaround Time: %.2f\n", ave_turnaround);
     printf("Average Waiting Time: %.2f\n", ave_wait);
 
@@ -225,6 +225,7 @@ int isPreempt( Task *tasks, int task_size, int curr_time, Task *running_task )
         }
         ++ii;
     }
+    free(undone_idx); undone_idx = NULL;
     return preempt;
 }
 
@@ -348,8 +349,7 @@ void gantt_chart( WriteTask *wrt_task, int wrt_size, int start_time )
 /**
  * Return the average waiting time of the processes 
  */
-double ave_wait_time( WriteTask *wrt_task, int wrt_size,
-                      int total_idle_time )
+double ave_wait_time( WriteTask *wrt_task, int wrt_size )
 {
     int i, actual_size, wait_time;
     double ave, sum;

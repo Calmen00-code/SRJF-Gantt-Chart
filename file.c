@@ -19,7 +19,7 @@ Task* read_task( char filename[] )
     FILE *readPtr = NULL;
     Task *tasks = NULL;
     int i, size;
-    int arrival_time, burst_time, priority;
+    int arrival_time, burst_time;
     char process_label[STR];
     char p_label = 'P';
 
@@ -33,8 +33,8 @@ Task* read_task( char filename[] )
         tasks = calloc(sizeof(Task), size);
 
         i = 0;
-        while ( fscanf(readPtr, "%d %d %d\n", &arrival_time, 
-                       &burst_time, &priority ) != EOF )
+        while ( fscanf(readPtr, "%d %d\n", &arrival_time, 
+                       &burst_time ) != EOF )
         {
             tasks[i].arrival = arrival_time;
             tasks[i].burst = burst_time;
