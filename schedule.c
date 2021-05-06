@@ -229,39 +229,6 @@ int isPreempt( Task *tasks, int task_size, int curr_time, Task *running_task )
     return preempt;
 }
 
-/**
- * Inform the next preempt time and index from current running task 
- */
-int next_preempt( Task *tasks, int task_size, 
-                  Task *running_task, int *preempt_idx )
-{
-    int i, j;
-    int time;
-
-    /**
-     * Find the entries that stores running_task in tasks
-     *
-     * Using the comparison of address in each entries of task[i]
-     * with the address of running_task 
-     */
-    i = 0;
-    while ( i < task_size && strcmp(tasks[i].label, running_task->label) != 0 )
-        ++i;
- 
-    /* ASSERTION: task[i].arrival > running_task->arrival */
-    /* Stops when next arrival time was found */
-    j = i;
-    while ( j < task_size && tasks[j].arrival == running_task->arrival )
-        ++j;
-
-    /* Return Next Preempt Index and Next Preempt Time */
-    if ( j < task_size ) {
-        *preempt_idx = j;
-        time = tasks[j].arrival;
-    }
-    return time;
-}
-
 /** 
  * Operation to print the gantt chart of the process 
  */
